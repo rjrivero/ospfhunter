@@ -109,25 +109,25 @@ func makeIntRing(size int) intRing {
 }
 
 // Push the item at Head, and moves Head forward.
-// returns the former Head, and the value evicted.
-func (r *intRing) Push(val int) (head, evicted int) {
+// returns the value evicted.
+func (r *intRing) Push(val int) int {
 	// Must check Full() before pushing. If it is full *after* pushing,
 	// but not before, we have not evicted anything
 	full := r.Full()
-	head = r.HeadNext()
+	evicted, head := 0, r.HeadNext()
 	if full {
 		evicted = r.Items[head]
 	}
 	r.Items[head] = val
-	return head, evicted
+	return evicted
 }
 
 // Pop the item at Tail, and move Tail forward.
 // returns the former Tail, and the value evicted.
-func (r *intRing) Pop() (tail, evicted int) {
-	tail = r.TailNext()
+func (r *intRing) Pop() int {
+	evicted, tail := 0, r.TailNext()
 	if tail >= 0 {
 		evicted = r.Items[tail]
 	}
-	return tail, evicted
+	return evicted
 }

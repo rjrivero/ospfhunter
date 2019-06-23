@@ -103,9 +103,9 @@ func (tc *ringTestCase) run(t *testing.T) {
 	for _, item := range tc.input {
 		var evicted int
 		if item > math.MinInt32 {
-			_, evicted = tested.Push(item)
+			evicted = tested.Push(item)
 		} else {
-			_, evicted = tested.Pop()
+			evicted = tested.Pop()
 		}
 		remain = append(remain, evicted)
 	}

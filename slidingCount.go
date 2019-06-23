@@ -60,12 +60,7 @@ func (s *slidingCount) Inc(atSecond int64) int {
 		s.accum -= tail.hits
 		s.TailNext()
 	}
-	if s.Full() {
-		// If ring is still full, leave room for a new bucket
-		tail := s.buckets[s.TailNext()]
-		s.accum -= tail.hits
-	}
-	// Add a new bucket for given second
+	// Add a new bucket for current second
 	s.head = s.HeadNext()
 	s.buckets[s.head] = bucket{second: atSecond, hits: 1}
 	s.accum++
