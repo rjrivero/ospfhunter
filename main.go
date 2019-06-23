@@ -74,22 +74,24 @@ func unicastKey(p gopacket.Packet) (string, error) {
 	if !ok {
 		return "", nil
 	}
-	return unicastAddresses(p), nil
+	return unicastAddresses(p)
 }
 
 // isMaxAge returns true if the packet is a MaxAge OSPF LSA frame
 func isMaxAge(p gopacket.Packet) (bool, error) {
 	if ospfLayer := p.Layer(layers.LayerTypeOSPF); ospfLayer != nil {
-		if ospf, ok := ospfLayer.(*layers.OSPFv2); ok {
-			if ospf.Type == layers.OSPFLinkStateUpdate {
-				lsUpdate, ok := ospf.Content.(layers.LSUpdate)
-				if !ok {
-					return false, xerrors.Errorf("Payload incorrecto en LSUpdate: %+v", ospf.Content)
-				}
-				for _, lsa := range lsUpdate.LSAs {
-					if lsa.LSAge >= 3600 {
-						return true, nil
-					}
+		ospf, ok := ospfLayer.(*layers.OSPFv2)
+		if !ok {
+			return false, xerrors.Errorf("Payload incorrecto en OSPFLayer: %+v", ospfLayer)
+		}
+		if ospf.Type == layers.OSPFLinkStateUpdate {
+			lsUpdate, ok := ospf.Content.(layers.LSUpdate)
+			if !ok {
+				return false, xerrors.Errorf("Payload incorrecto en LSUpdate: %+v", ospf.Content)
+			}
+			for _, lsa := range lsUpdate.LSAs {
+				if lsa.LSAge >= 3600 {
+					return true, nil
 				}
 			}
 		}
@@ -98,15 +100,17 @@ func isMaxAge(p gopacket.Packet) (bool, error) {
 }
 
 // unicastAddresses returns the src and dest IP if both are unicast. Otherwise returns ""
-func unicastAddresses(p gopacket.Packet) string {
+func unicastAddresses(p gopacket.Packet) (string, error) {
 	if ipLayer := p.Layer(layers.LayerTypeIPv4); ipLayer != nil {
-		if ip, ok := ipLayer.(*layers.IPv4); ok {
-			if !ip.SrcIP.IsMulticast() && !ip.DstIP.IsMulticast() {
-				return strings.Join([]string{ip.SrcIP.String(), ip.DstIP.String()}, "-")
-			}
+		ip, ok := ipLayer.(*layers.IPv4)
+		if !ok {
+			return "", xerrors.Errorf("Payload incorrecto en IPLayer: %+v", ipLayer)
+		}
+		if !ip.SrcIP.IsMulticast() && !ip.DstIP.IsMulticast() {
+			return strings.Join([]string{ip.SrcIP.String(), ip.DstIP.String()}, "-"), nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func formatTCPDump() {
