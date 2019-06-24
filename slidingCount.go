@@ -23,9 +23,16 @@ type slidingCount struct {
 }
 
 func makeSlidingCount(interval, burst int) slidingCount {
+	// We are only interested in bursts up to 'burst' packets long
+	// There is no point in keeping more buckets than 'burst' or
+	// 'interval', whichever is lower.
+	bucketSize := interval
+	if burst < interval {
+		bucketSize = burst
+	}
 	sc := slidingCount{
-		Ring:     Ring{Size: burst},
-		buckets:  make([]bucket, burst),
+		Ring:     Ring{Size: bucketSize},
+		buckets:  make([]bucket, bucketSize),
 		interval: interval,
 	}
 	// Initialize first bucket
@@ -43,7 +50,7 @@ func (s *slidingCount) Inc(atSecond int64) int {
 	case atSecond < lastSecond:
 		panic("Time cannot go backwards!")
 	case atSecond == lastSecond:
-		// Accumlate in the current second
+		// Accumulate in the current second
 		s.buckets[s.head].hits++
 		s.accum++
 		return s.accum
@@ -59,6 +66,12 @@ func (s *slidingCount) Inc(atSecond int64) int {
 		// Otherwise, decrement accumulator and pop oldest item
 		s.accum -= tail.hits
 		s.TailNext()
+	}
+	// If still full, pop oldest item. We are only interested in bursts up to
+	// 'burst' size, anyway.
+	if s.Ring.Full() {
+		tail := s.buckets[s.TailNext()]
+		s.accum -= tail.hits
 	}
 	// Add a new bucket for current second
 	s.head = s.HeadNext()
