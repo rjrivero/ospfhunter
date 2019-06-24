@@ -74,7 +74,7 @@ func (r *Ring) Each() Iterator {
 	countdown := r.head - r.tail
 	if countdown < 0 {
 		// If tail > head, the buffer has wrapped around
-		countdown = r.Size - countdown
+		countdown = r.Size + countdown
 	}
 	return Iterator{
 		size:      r.Size,

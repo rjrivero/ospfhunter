@@ -63,6 +63,13 @@ func TestRing(t *testing.T) {
 			results:  []int{0, 0, 3, 2, 1, 4},
 		},
 		{
+			label:    "Iterates properly when wrapped (tail > head)",
+			ringSize: 3,
+			input:    []int{push(3), push(2), pop(), push(4)},
+			contents: []int{2, 4},
+			results:  []int{0, 0, 3, 0},
+		},
+		{
 			label:    "Pop should remove items",
 			ringSize: 5,
 			input:    []int{push(5), push(2), push(1), push(4), pop(), pop()},
