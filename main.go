@@ -27,13 +27,6 @@ const MaxInterval = 1000
 // MinCount is the minimum number of hits to find in the time window
 const MinCount = 2
 
-// Result of each call to scan()
-type result struct {
-	burst    packetRing
-	filename string
-	err      error
-}
-
 func main() {
 
 	var interval, count int
@@ -62,31 +55,21 @@ func main() {
 	log.Println("Buscando ráfaga de ", count, " paquetes en ", interval, " segundos")
 
 	// Lanzar todos los ficheros en paralelo
-	queue := make(chan result)
 	wg := sync.WaitGroup{}
-	go func() {
-		for r := range queue {
-			burst, filename, err := r.burst, r.filename, r.err
-			if err != nil {
-				log.Printf("Error procesando fichero %s: %+v\n", filename, err)
-			}
-			if burst.Size > 0 {
-				log.Printf("Ráfaga encontrada en fichero %s: %s\n", filename, burst.String())
-			}
-		}
-	}()
+	wg.Add(len(filenameList))
 
 	for _, filename := range filenameList {
 		go func(filename string) {
 			defer wg.Done()
 			burst, err := scan(filename, interval, count, unicastKey)
-			queue <- result{
-				filename: filename,
-				burst:    burst,
-				err:      err,
+			if err != nil {
+				// Log is concurrency-safe, we can run from the goroutine
+				log.Printf("Error procesando fichero %s: %+v\n", filename, err)
+			}
+			if burst.Size > 0 {
+				log.Printf("Ráfaga encontrada en fichero %s: %s\n", filename, burst.String())
 			}
 		}(filename)
-		wg.Add(1)
 	}
 	wg.Wait()
 }
@@ -94,11 +77,8 @@ func main() {
 // unicastKey returns src and dst IP if the packet is a MaxAge unicast LSA
 func unicastKey(p gopacket.Packet) (string, error) {
 	ok, err := isMaxAge(p)
-	if err != nil {
+	if err != nil || !ok {
 		return "", err
-	}
-	if !ok {
-		return "", nil
 	}
 	return unicastAddresses(p)
 }
