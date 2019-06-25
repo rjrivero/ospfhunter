@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	// Tengo que usar este fork hasta que arreglen los problemas con el parseo OSPF
 	// Ver:
@@ -25,6 +26,13 @@ const MaxInterval = 1000
 
 // MinCount is the minimum number of hits to find in the time window
 const MinCount = 2
+
+// Result of each call to scan()
+type result struct {
+	burst    packetRing
+	filename string
+	err      error
+}
 
 func main() {
 
@@ -53,16 +61,34 @@ func main() {
 	}
 	log.Println("Buscando ráfaga de ", count, " paquetes en ", interval, " segundos")
 
+	// Lanzar todos los ficheros en paralelo
+	queue := make(chan result)
+	wg := sync.WaitGroup{}
+	go func() {
+		for r := range queue {
+			burst, filename, err := r.burst, r.filename, r.err
+			if err != nil {
+				log.Printf("Error procesando fichero %s: %+v\n", filename, err)
+			}
+			if burst.Size > 0 {
+				log.Printf("Ráfaga encontrada en fichero %s: %s\n", filename, burst.String())
+			}
+		}
+	}()
+
 	for _, filename := range filenameList {
-		burst, err := scan(filename, interval, count, unicastKey)
-		if err != nil {
-			log.Fatalf("Error procesando fichero %s: %+v", filename, err)
-		}
-		if burst.Size > 0 {
-			log.Println("Ráfaga encontrada en fichero ", filename, ":\n", burst)
-			return
-		}
+		go func(filename string) {
+			defer wg.Done()
+			burst, err := scan(filename, interval, count, unicastKey)
+			queue <- result{
+				filename: filename,
+				burst:    burst,
+				err:      err,
+			}
+		}(filename)
+		wg.Add(1)
 	}
+	wg.Wait()
 }
 
 // unicastKey returns src and dst IP if the packet is a MaxAge unicast LSA
