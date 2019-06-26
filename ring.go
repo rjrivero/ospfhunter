@@ -60,25 +60,24 @@ func (r *Ring) Reset() {
 	r.full = false
 }
 
+// Count number of items currently in the ring
+func (r *Ring) Count() int {
+	switch {
+	case r.full:
+		return r.Size
+	case r.head < r.tail: // buffer is wrapped
+		return r.Size - r.tail + r.head
+	default:
+		return r.head - r.tail
+	}
+}
+
 // Each returns an iterator to traverse the ring in insertion order,
 // from oldest to newest.
 func (r *Ring) Each() Iterator {
-	if r.full {
-		return Iterator{
-			size:      r.Size,
-			countdown: r.Size,
-			At:        r.tail - 1, // Iterator.Next will increment this
-		}
-	}
-	// If head > tail, the buffer does not wrap
-	countdown := r.head - r.tail
-	if countdown < 0 {
-		// If tail > head, the buffer has wrapped around
-		countdown = r.Size + countdown
-	}
 	return Iterator{
 		size:      r.Size,
-		countdown: countdown,
+		countdown: r.Count(),
 		At:        r.tail - 1, // Iterator.Next will increment this
 	}
 }
@@ -93,6 +92,19 @@ func (i *Iterator) Next() bool {
 	if i.At >= i.size {
 		i.At = 0
 	}
+	return true
+}
+
+// Skip all remaining values and go for the last one, if there is any
+func (i *Iterator) Skip() bool {
+	if i.countdown <= 0 {
+		return false
+	}
+	i.At += i.countdown
+	if i.At >= i.size {
+		i.At -= i.size
+	}
+	i.countdown = 0
 	return true
 }
 

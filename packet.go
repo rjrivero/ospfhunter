@@ -17,12 +17,14 @@ type packet struct {
 }
 
 type packetRing struct {
+	Key   string
 	Items []packet
 	Ring
 }
 
-func makePacketRing(size int) packetRing {
+func makePacketRing(key string, size int) packetRing {
 	return packetRing{
+		Key:   key,
 		Items: make([]packet, size),
 		Ring:  Ring{Size: size},
 	}
@@ -35,9 +37,23 @@ func (r *packetRing) Push(packetNum int, p gopacket.Packet) {
 
 // String enumerates the frame numbers
 func (r packetRing) String() string {
+	iter := r.Each()
+	if !iter.Next() {
+		return ""
+	}
+	// Primera linea: clave del grupo
+	str := make([]string, 3)
+	str[0] = fmt.Sprintf("Key: %s", r.Key)
+	// Segunda linea: fechas
+	start := r.Items[iter.At].Metadata().Timestamp
+	iter.Skip()
+	stop := r.Items[iter.At].Metadata().Timestamp
+	str[1] = fmt.Sprintf("Intervalo %s - %s", start.String(), stop.String())
+	// Tercera linea: paquetes
 	buf := make([]string, 0, r.Size)
 	for iter := r.Each(); iter.Next(); {
 		buf = append(buf, fmt.Sprintf("frame %d", r.Items[iter.At].PacketNum))
 	}
-	return strings.Join(buf, ", ")
+	str[2] = strings.Join(buf, ", ")
+	return strings.Join(str, "\n")
 }

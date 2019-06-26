@@ -61,13 +61,18 @@ func main() {
 	for _, filename := range filenameList {
 		go func(filename string) {
 			defer wg.Done()
-			burst, err := scan(filename, interval, count, unicastKey)
+			scanner, err := newScanner(filename, interval, count, unicastKey)
 			if err != nil {
 				// Log is concurrency-safe, we can run from the goroutine
-				log.Printf("Error procesando fichero %s: %+v\n", filename, err)
+				log.Printf("Error creando scanner para fichero %s: %+v\n", filename, err)
+				return
 			}
-			if burst.Size > 0 {
-				log.Printf("Ráfaga encontrada en fichero %s: %s\n", filename, burst.String())
+			defer scanner.Close()
+			for scanner.Next() {
+				log.Printf("Ráfaga encontrada en fichero %s:\n%s\n\n", filename, scanner.Burst().String())
+			}
+			if err := scanner.Err(); err != nil {
+				log.Printf("Error procesando fichero %s: %+v\n", filename, err)
 			}
 		}(filename)
 	}

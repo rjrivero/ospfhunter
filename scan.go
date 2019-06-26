@@ -20,6 +20,7 @@ type keyFunc func(gopacket.Packet) (string, error)
 type group struct {
 	slidingCount
 	packetRing
+	inBurst bool
 }
 
 type packetIterator struct {
@@ -53,56 +54,120 @@ func (p *packetIterator) Err() error {
 	return p.lastError
 }
 
-// Scan the file for a burst of frames with the same key.
-func scan(filename string, interval, count int, groupBy keyFunc) (empty packetRing, err error) {
+// scanner scans pcap file looking for bursts
+type scanner struct {
+	iterator        packetIterator
+	handle          *pcap.Handle
+	groupMap        map[string]*group
+	groupBy         keyFunc
+	interval, count int
+	lastBurst       packetRing
+	lastErr         error
+}
+
+// NewScanner allocates a new Burst scanner
+func newScanner(filename string, interval, count int, groupBy keyFunc) (*scanner, error) {
 	// Me salto directorios
 	stat, err := os.Stat(filename)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
 	if stat.IsDir() {
 		log.Println("Ignorando ", filename, " por ser un directorio")
-		return empty, nil
+		return nil, nil
 	}
 	// Abro la captura y la envuelvo en un iterador
 	handle, err := pcap.OpenOffline(filename)
 	if err != nil {
-		return empty, err
+		return nil, err
 	}
-	defer handle.Close()
-	packetSource := packetIterator{
-		Source: gopacket.NewPacketSource(handle, handle.LinkType()),
+	return &scanner{
+		iterator: packetIterator{
+			Source: gopacket.NewPacketSource(handle, handle.LinkType()),
+		},
+		handle:   handle,
+		groupMap: make(map[string]*group),
+		groupBy:  groupBy,
+		interval: interval,
+		count:    count,
+	}, nil
+}
+
+// Close the scanner
+func (s *scanner) Close() {
+	if s != nil && s.handle != nil {
+		s.handle.Close()
+		s.handle = nil
 	}
-	// Y ahora, voy agrupando ráfagas
-	groupMap := make(map[string]*group)
-	for packetSource.Next() {
-		packetNum, nextPacket := packetSource.Value()
+}
+
+// Next returns true if there is a burst in the pcap file
+func (s *scanner) Next() bool {
+	if s == nil || s.handle == nil || s.lastErr != nil {
+		return false
+	}
+	for s.iterator.Next() {
+		packetNum, nextPacket := s.iterator.Value()
 		if err := nextPacket.ErrorLayer(); err != nil {
-			return empty, xerrors.Errorf("Error decodificando paquete #%d: %w", packetNum, err)
+			s.lastErr = xerrors.Errorf("Error decodificando paquete #%d: %w", packetNum, err)
+			return false
 		}
-		key, err := groupBy(nextPacket)
+		key, err := s.groupBy(nextPacket)
 		if err != nil {
-			return empty, xerrors.Errorf("Error calculando key del paquete #%d: %w", packetNum, err)
+			s.lastErr = xerrors.Errorf("Error calculando key del paquete #%d: %w", packetNum, err)
+			return false
 		}
 		if key == "" {
 			continue
 		}
 		atSecond := nextPacket.Metadata().Timestamp.Unix()
-		current, ok := groupMap[key]
+		current, ok := s.groupMap[key]
 		if !ok {
 			current = &group{
-				slidingCount: makeSlidingCount(interval, count),
-				packetRing:   makePacketRing(count),
+				slidingCount: makeSlidingCount(s.interval, s.count),
+				// Permito recoger ráfagas largas, hasta 10 veces más paquetes
+				packetRing: makePacketRing(key, 10*s.count),
 			}
-			groupMap[key] = current
+			s.groupMap[key] = current
 		}
 		current.Push(packetNum, nextPacket)
-		if burst := current.Inc(atSecond); burst >= count {
-			return current.packetRing, nil
+		burst := current.Inc(atSecond)
+		switch {
+		case !current.inBurst && burst >= s.count:
+			current.inBurst = true
+		case current.inBurst && burst < s.count:
+			delete(s.groupMap, key)
+			s.lastBurst = current.packetRing
+			return true
 		}
 	}
-	if err := packetSource.Err(); err != nil {
-		return empty, xerrors.Errorf("Error iterando paquetes: %w", err)
+	// Loop may end while there are still some bursts. In that case,
+	// yield them now.
+	for key, group := range s.groupMap {
+		delete(s.groupMap, key)
+		if group.inBurst {
+			s.lastBurst = group.packetRing
+			return true
+		}
 	}
-	return empty, nil
+	if err := s.iterator.Err(); err != nil {
+		s.lastErr = xerrors.Errorf("Error iterando paquetes: %w", err)
+	}
+	// If the file is exhausted, release early
+	s.handle.Close()
+	s.handle = nil
+	return false
+}
+
+// Burst returns the current burst
+func (s *scanner) Burst() packetRing {
+	return s.lastBurst
+}
+
+// Err returns the last error in this Scanner
+func (s *scanner) Err() error {
+	if s == nil {
+		return nil
+	}
+	return s.lastErr
 }
