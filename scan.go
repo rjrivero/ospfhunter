@@ -5,8 +5,7 @@ import (
 	"log"
 	"os"
 
-	// Tengo que usar este fork hasta que arreglen los problemas con el parseo OSPF
-	// Ver:
+	// Se debe utilizar una versión de gopacket que incluya estos fixes:
 	// https://github.com/google/gopacket/pull/671
 	// https://github.com/google/gopacket/pull/672
 	"github.com/google/gopacket"

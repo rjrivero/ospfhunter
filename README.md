@@ -1,6 +1,6 @@
 # OSPFHunter
 
-Esta aplicación analiza un fichero pcap, buscando una ráfaga de paquetes OSPFv2 LSA pdate que cumplan estas condiciones:
+Esta aplicación analiza un fichero pcap, buscando una ráfaga de paquetes OSPFv2 LSA pdate que cumpla estas condiciones:
 
 - Contener alguna LSA con el campo Age = 3600
 - Ser unicast
