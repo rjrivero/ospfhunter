@@ -13,8 +13,8 @@ import (
 	// Ver:
 	// https://github.com/google/gopacket/pull/671
 	// https://github.com/google/gopacket/pull/672
-	"github.com/rjrivero/gopacket"
-	"github.com/rjrivero/gopacket/layers"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"golang.org/x/xerrors"
 )
 
